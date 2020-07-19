@@ -1,4 +1,4 @@
-module Return exposing
+module Types.Return exposing
     ( noCommand
     , withCommand
     )
