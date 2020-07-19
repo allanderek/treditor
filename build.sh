@@ -1,3 +1,3 @@
 #!/bin/sh
 
-elm make Home.elm --optimize 
+elm make Home.elm --debug 

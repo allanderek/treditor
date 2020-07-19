@@ -1,7 +1,9 @@
 module Types.Tree exposing
     ( Tree(..)
+    , goDown
     , goIn
     , goOut
+    , goUp
     , insert
     )
 
@@ -41,6 +43,78 @@ insert key tree =
         Cursor subTree ->
             insert key subTree
                 |> Cursor
+
+
+goUp : Tree node leaf -> Tree node leaf
+goUp tree =
+    case tree of
+        Cursor subTree ->
+            goUp subTree
+                |> Cursor
+
+        Leaf _ _ ->
+            tree
+
+        Node node subTrees ->
+            let
+                moveUp l =
+                    case l of
+                        [] ->
+                            []
+
+                        (Cursor t) :: others ->
+                            Cursor t :: moveUp others
+
+                        first :: (Cursor t) :: others ->
+                            Cursor first :: t :: moveUp others
+
+                        first :: others ->
+                            first :: moveUp others
+            in
+            subTrees
+                |> List.map goUp
+                |> moveUp
+                |> Node node
+
+
+goDown : Tree node leaf -> Tree node leaf
+goDown tree =
+    case tree of
+        Cursor subTree ->
+            goDown subTree
+                |> Cursor
+
+        Leaf _ _ ->
+            tree
+
+        Node node subTrees ->
+            let
+                moveDown l =
+                    case l of
+                        [] ->
+                            []
+
+                        (Cursor t) :: others ->
+                            -- Note we recurs first in case there are multiple cursors successively
+                            case moveDown others of
+                                [] ->
+                                    [ Cursor t ]
+
+                                (Cursor first) :: rest ->
+                                    -- If we have recursed and the first is *still* a cursor that means it's
+                                    -- cursors all the way from here to the bottom, so we're not moving
+                                    Cursor t :: Cursor first :: rest
+
+                                first :: rest ->
+                                    t :: Cursor first :: rest
+
+                        first :: rest ->
+                            first :: moveDown rest
+            in
+            subTrees
+                |> List.map goDown
+                |> moveDown
+                |> Node node
 
 
 goIn : Tree node leaf -> Tree node leaf

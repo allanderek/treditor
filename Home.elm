@@ -33,12 +33,14 @@ initialModel : Model
 initialModel =
     { tree = Json.example
     , mode = Normal
+    , lastKey = Nothing
     }
 
 
 type alias Model =
     { tree : Json.Tree
     , mode : Mode
+    , lastKey : Maybe Key
     }
 
 
@@ -57,10 +59,37 @@ view model =
 
                 Insert ->
                     "insert-mode"
+
+        reportKey key =
+            Html.div
+                [ Attributes.class "last-key-pressed" ]
+                [ Html.text "Last key: "
+                , case key of
+                    Key.Character c ->
+                        String.fromChar c
+                            |> Html.text
+
+                    Key.Control s ->
+                        Html.text s
+                ]
     in
     { title = "Treditor"
     , body =
         [ style
+        , Html.header
+            [ Attributes.class "header-info" ]
+            [ Html.text "Mode: "
+            , case model.mode of
+                Normal ->
+                    Html.text "Normal"
+
+                Insert ->
+                    Html.text "Insert"
+            , Html.text " "
+            , model.lastKey
+                |> Maybe.map reportKey
+                |> Maybe.withDefault (Html.text "")
+            ]
         , Html.div
             [ Attributes.class modeClass ]
             [ Json.view model.tree ]
@@ -104,27 +133,43 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update message model =
     case message of
         KeyPressed key ->
-            case model.mode of
-                Normal ->
-                    case key of
-                        Key.Character 'i' ->
-                            model
-                                |> modifyTree Tree.goIn
-                                |> Return.noCommand
+            { model | lastKey = Just key }
+                |> interpretKey key
+                |> Return.noCommand
 
-                        Key.Character 'o' ->
-                            model
-                                |> modifyTree Tree.goOut
-                                |> Return.noCommand
 
-                        Key.Character 'e' ->
-                            { model | mode = Insert }
-                                |> Return.noCommand
+interpretKey : Key -> Model -> Model
+interpretKey key model =
+    case model.mode of
+        Normal ->
+            case key of
+                Key.Character 'i' ->
+                    model
+                        |> modifyTree Tree.goIn
 
-                        _ ->
-                            Return.noCommand model
+                Key.Character 'o' ->
+                    model
+                        |> modifyTree Tree.goOut
 
-                Insert ->
+                Key.Character 'k' ->
+                    model
+                        |> modifyTree Tree.goDown
+
+                Key.Character 'j' ->
+                    model
+                        |> modifyTree Tree.goUp
+
+                Key.Character 'e' ->
+                    { model | mode = Insert }
+
+                _ ->
+                    model
+
+        Insert ->
+            case key of
+                Key.Control "Enter" ->
+                    { model | mode = Normal }
+
+                _ ->
                     model
                         |> modifyTree (Tree.insert key)
-                        |> Return.noCommand
