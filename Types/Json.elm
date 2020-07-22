@@ -2,6 +2,8 @@ module Types.Json exposing
     ( Leaf(..)
     , Node(..)
     , Tree
+    , addLocal
+    , changeToObject
     , example
     , view
     )
@@ -99,3 +101,63 @@ view tree =
                     subFields
                         |> simpleList "list" "list-element" ","
                         |> surround "[" "]"
+
+
+addLocal : Tree -> Tree
+addLocal tree =
+    case tree of
+        Tree.Cursor subTree ->
+            addLocal subTree
+                |> Tree.Cursor
+
+        Tree.Leaf _ _ ->
+            tree
+
+        Tree.Node kind subTrees ->
+            let
+                new =
+                    case kind of
+                        ObjectTree ->
+                            Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf StringLiteral "" ]
+
+                        FieldTree ->
+                            -- This shouldn't really happen you should always have exactly two
+                            Tree.Leaf StringLiteral ""
+
+                        ListTree ->
+                            Tree.Leaf StringLiteral ""
+
+                add l =
+                    case l of
+                        [] ->
+                            []
+
+                        (Tree.Cursor t) :: rest ->
+                            Tree.Cursor t :: new :: add rest
+
+                        first :: rest ->
+                            first :: add rest
+            in
+            subTrees
+                |> List.map addLocal
+                |> add
+                |> Tree.Node kind
+
+
+changeToObject : Tree -> Tree
+changeToObject tree =
+    case tree of
+        Tree.Cursor subTree ->
+            -- We can be more clever about this, for example if it is already an object leave it,
+            -- if it is a list use the list elements as valeus for fields with empty names
+            [ Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf StringLiteral "" ] ]
+                |> Tree.Node ObjectTree
+                |> Tree.Cursor
+
+        Tree.Leaf _ _ ->
+            tree
+
+        Tree.Node kind subTrees ->
+            subTrees
+                |> List.map changeToObject
+                |> Tree.Node kind

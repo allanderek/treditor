@@ -33,6 +33,7 @@ initialModel : Model
 initialModel =
     { tree = Json.example
     , mode = Normal
+    , keyString = []
     , lastKey = Nothing
     }
 
@@ -40,6 +41,7 @@ initialModel =
 type alias Model =
     { tree : Json.Tree
     , mode : Mode
+    , keyString : List Key
     , lastKey : Maybe Key
     }
 
@@ -60,18 +62,26 @@ view model =
                 Insert ->
                     "insert-mode"
 
+        showKey key =
+            case key of
+                Key.Character c ->
+                    String.fromChar c
+                        |> Html.text
+
+                Key.Control s ->
+                    Html.text s
+
         reportKey key =
             Html.div
                 [ Attributes.class "last-key-pressed" ]
                 [ Html.text "Last key: "
-                , case key of
-                    Key.Character c ->
-                        String.fromChar c
-                            |> Html.text
-
-                    Key.Control s ->
-                        Html.text s
+                , showKey key
                 ]
+
+        currentCommand =
+            Html.div
+                [ Attributes.class "current-command" ]
+                (Html.text "Current command: " :: List.map showKey model.keyString)
     in
     { title = "Treditor"
     , body =
@@ -89,6 +99,7 @@ view model =
             , model.lastKey
                 |> Maybe.map reportKey
                 |> Maybe.withDefault (Html.text "")
+            , currentCommand
             ]
         , Html.div
             [ Attributes.class modeClass ]
@@ -129,47 +140,76 @@ modifyTree f model =
     { model | tree = f model.tree }
 
 
+clearKeyString : Model -> Model
+clearKeyString model =
+    { model | keyString = [] }
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update message model =
     case message of
         KeyPressed key ->
-            { model | lastKey = Just key }
-                |> interpretKey key
+            { model
+                | lastKey = Just key
+                , keyString = List.append model.keyString [ key ]
+            }
+                |> interpretKeyString
                 |> Return.noCommand
 
 
-interpretKey : Key -> Model -> Model
-interpretKey key model =
+interpretKeyString : Model -> Model
+interpretKeyString model =
     case model.mode of
         Normal ->
-            case key of
-                Key.Character 'i' ->
+            case model.keyString of
+                [ Key.Character 'i' ] ->
                     model
                         |> modifyTree Tree.goIn
+                        |> clearKeyString
 
-                Key.Character 'o' ->
+                [ Key.Character 'o' ] ->
                     model
                         |> modifyTree Tree.goOut
+                        |> clearKeyString
 
-                Key.Character 'k' ->
+                [ Key.Character 'k' ] ->
                     model
                         |> modifyTree Tree.goDown
+                        |> clearKeyString
 
-                Key.Character 'j' ->
+                [ Key.Character 'j' ] ->
                     model
                         |> modifyTree Tree.goUp
+                        |> clearKeyString
 
-                Key.Character 'e' ->
+                [ Key.Character 'e' ] ->
                     { model | mode = Insert }
+                        |> clearKeyString
+
+                [ Key.Character 'a' ] ->
+                    model
+                        |> modifyTree Json.addLocal
+                        |> clearKeyString
+
+                [ Key.Character 'c', Key.Character 'o' ] ->
+                    model
+                        |> modifyTree Json.changeToObject
+                        |> clearKeyString
 
                 _ ->
-                    model
+                    case List.member (Key.Character 'q') model.keyString of
+                        True ->
+                            model |> clearKeyString
+
+                        False ->
+                            model
 
         Insert ->
-            case key of
-                Key.Control "Enter" ->
+            case model.keyString of
+                [ Key.Control "Enter" ] ->
                     { model | mode = Normal }
+                        |> clearKeyString
 
                 _ ->
-                    model
-                        |> modifyTree (Tree.insert key)
+                    List.foldl (Tree.insert >> modifyTree) model model.keyString
+                        |> clearKeyString
