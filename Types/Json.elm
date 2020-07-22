@@ -148,14 +148,54 @@ changeToObject : Tree -> Tree
 changeToObject tree =
     case tree of
         Tree.Cursor subTree ->
-            -- We can be more clever about this, for example if it is already an object leave it,
-            -- if it is a list use the list elements as valeus for fields with empty names
-            [ Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf StringLiteral "" ] ]
-                |> Tree.Node ObjectTree
-                |> Tree.Cursor
+            case subTree of
+                Tree.Cursor _ ->
+                    -- we can merge the two cursors
+                    changeToObject subTree
+
+                Tree.Node ObjectTree subTrees ->
+                    -- We're already an object tree so nothing to change here, but recurse in case there are
+                    -- further cursors below
+                    List.map changeToObject subTrees
+                        |> Tree.Node ObjectTree
+                        |> Tree.Cursor
+
+                Tree.Node FieldTree (left :: right) ->
+                    -- We cannot change a field tree to be an object, and similar to below we cannot change
+                    -- the left side of a field tree, but we might have cursors in the value part.
+                    (left :: List.map changeToObject right)
+                        |> Tree.Node FieldTree
+                        |> Tree.Cursor
+
+                Tree.Node FieldTree [] ->
+                    -- If you somehow manage to produce this, then the user is probably trying to get out of
+                    -- this error state so let's just do what seems reasonable here:
+                    Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf StringLiteral "" ]
+                        |> Tree.Cursor
+
+                Tree.Leaf leaf value ->
+                    -- So in this case the leaf becomes the value of a single field of an ojbect
+                    [ Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf leaf value ] ]
+                        |> Tree.Node ObjectTree
+                        |> Tree.Cursor
+
+                Tree.Node ListTree subTrees ->
+                    let
+                        makeField element =
+                            Tree.Node FieldTree [ Tree.Leaf StringLiteral "", element ]
+                    in
+                    List.map changeToObject subTrees
+                        |> List.map makeField
+                        |> Tree.Node ObjectTree
+                        |> Tree.Cursor
 
         Tree.Leaf _ _ ->
             tree
+
+        Tree.Node FieldTree (left :: right) ->
+            -- We cannot change the left part of a field tree into an object
+            (left :: List.map changeToObject right)
+                |> Tree.Node FieldTree
 
         Tree.Node kind subTrees ->
             subTrees
