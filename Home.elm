@@ -196,6 +196,11 @@ interpretKeyString model =
                         |> modifyTree Json.changeToObject
                         |> clearKeyString
 
+                [ Key.Character 'c', Key.Character 'l' ] ->
+                    model
+                        |> modifyTree Json.changeToList
+                        |> clearKeyString
+
                 _ ->
                     case List.member (Key.Character 'q') model.keyString of
                         True ->

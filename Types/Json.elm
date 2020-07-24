@@ -3,6 +3,7 @@ module Types.Json exposing
     , Node(..)
     , Tree
     , addLocal
+    , changeToList
     , changeToObject
     , example
     , view
@@ -141,6 +142,73 @@ addLocal tree =
             subTrees
                 |> List.map addLocal
                 |> add
+                |> Tree.Node kind
+
+
+changeToList : Tree -> Tree
+changeToList tree =
+    case tree of
+        Tree.Cursor subTree ->
+            case subTree of
+                Tree.Cursor _ ->
+                    -- we can merge the two cursors
+                    changeToList subTree
+
+                Tree.Node ListTree subTrees ->
+                    -- We're already a list tree so nothing to change here, but recurse in case there are
+                    -- further cursors below
+                    List.map changeToList subTrees
+                        |> Tree.Node ListTree
+                        |> Tree.Cursor
+
+                Tree.Node FieldTree (left :: right) ->
+                    -- We cannot change a field tree to be a list, and similar to below we cannot change
+                    -- the left side of a field tree, but we might have cursors in the value part.
+                    (left :: List.map changeToList right)
+                        |> Tree.Node FieldTree
+                        |> Tree.Cursor
+
+                Tree.Node FieldTree [] ->
+                    -- If you somehow manage to produce this, then the user is probably trying to get out of
+                    -- this error state so let's just do what seems reasonable here:
+                    Tree.Node FieldTree [ Tree.Leaf StringLiteral "", Tree.Leaf StringLiteral "" ]
+                        |> Tree.Cursor
+
+                Tree.Leaf leaf value ->
+                    -- So in this case the leaf becomes the value of a singleton list
+                    [ Tree.Leaf leaf value ]
+                        |> Tree.Node ListTree
+                        |> Tree.Cursor
+
+                Tree.Node ObjectTree subTrees ->
+                    let
+                        convertField element =
+                            case element of
+                                Tree.Node FieldTree [ _, value ] ->
+                                    value
+
+                                Tree.Cursor (Tree.Node FieldTree [ _, value ]) ->
+                                    value
+
+                                _ ->
+                                    element
+                    in
+                    List.map changeToList subTrees
+                        |> List.map convertField
+                        |> Tree.Node ListTree
+                        |> Tree.Cursor
+
+        Tree.Leaf _ _ ->
+            tree
+
+        Tree.Node FieldTree (left :: right) ->
+            -- We cannot change the left part of a field tree into an object
+            (left :: List.map changeToList right)
+                |> Tree.Node FieldTree
+
+        Tree.Node kind subTrees ->
+            subTrees
+                |> List.map changeToList
                 |> Tree.Node kind
 
 
